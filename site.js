@@ -1,12 +1,8 @@
 /* Slotted Golf — waitlist form wiring.
  *
- * Behavior:
- *  - If the form has a `data-form-endpoint` (or `action`) URL set, the email is
- *    POSTed there as form data (Formspree-style: expects JSON `{ok: true}` or 2xx).
- *  - If no endpoint is configured, the form degrades to a `mailto:` draft
- *    addressed to `data-fallback-email`, so the page works with zero backend.
- *
- * See README.md ("Waitlist form") for how to configure the endpoint.
+ * The form's `data-form-endpoint` holds the waitlist API URL. On submit we
+ * POST JSON `{email}` there and show inline status — no mail client, no
+ * fallback. Success and error states render in #waitlist-status.
  */
 (function () {
   "use strict";
@@ -16,8 +12,8 @@
 
   var status = document.getElementById("waitlist-status");
   var input = document.getElementById("wl-email");
-  var endpoint = form.getAttribute("data-form-endpoint") || form.getAttribute("action") || "";
-  var fallbackEmail = form.getAttribute("data-fallback-email") || "hello@slottedgolf.org";
+  var button = form.querySelector("button[type=submit]");
+  var endpoint = form.getAttribute("data-form-endpoint") || "";
 
   function setStatus(msg, isError) {
     if (!status) return;
@@ -25,56 +21,47 @@
     status.classList.toggle("error", Boolean(isError));
   }
 
+  function looksLikeEmail(value) {
+    // Cheap sanity check — the server does the real validation.
+    return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value);
+  }
+
   form.addEventListener("submit", function (event) {
     event.preventDefault();
 
     var email = (input && input.value ? input.value : "").trim();
-    if (!email) {
-      setStatus("Please enter your email address.", true);
+    if (!looksLikeEmail(email)) {
+      setStatus("Please enter a valid email address.", true);
+      if (input) input.focus();
       return;
     }
 
     if (!endpoint) {
-      // No endpoint configured — open a pre-filled email draft instead.
-      var subject = encodeURIComponent("Slotted Golf waitlist");
-      var body = encodeURIComponent("Please add me to the Slotted Golf waitlist: " + email);
-      window.location.href = "mailto:" + fallbackEmail + "?subject=" + subject + "&body=" + body;
-      setStatus("Opening your email app… send that draft and you’re on the list.");
+      setStatus("Signup isn’t available right now — please try again later.", true);
       return;
     }
 
-    var button = form.querySelector("button[type=submit]");
     if (button) button.disabled = true;
     setStatus("Joining…");
 
-    var data = new FormData(form);
-
     fetch(endpoint, {
       method: "POST",
-      body: data,
-      headers: { Accept: "application/json" }
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify({ email: email })
     })
       .then(function (response) {
         if (response.ok) {
           form.reset();
           setStatus("You’re on the list. See you on the tee.");
         } else {
-          return response.json().then(
-            function (payload) {
-              var msg =
-                payload && payload.errors && payload.errors.length
-                  ? payload.errors.map(function (e) { return e.message; }).join(", ")
-                  : "Something went wrong — please try again.";
-              setStatus(msg, true);
-            },
-            function () {
-              setStatus("Something went wrong — please try again.", true);
-            }
-          );
+          setStatus("Something went wrong — please try again in a minute.", true);
         }
       })
       .catch(function () {
-        setStatus("Network error — please try again.", true);
+        setStatus("Couldn’t reach the server — check your connection and try again.", true);
       })
       .finally(function () {
         if (button) button.disabled = false;

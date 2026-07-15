@@ -7,10 +7,11 @@ Video Golf Club Fitter. Pure HTML/CSS/vanilla JS, zero dependencies, no build st
 site/
 ├── index.html    # the page
 ├── styles.css    # all styles (system font stacks, no CDN assets)
-├── site.js       # waitlist form wiring + mailto fallback (progressive enhancement)
-├── favicon.svg   # favicon
-├── og.png        # social share card (1200×630), referenced by OG/Twitter meta tags
-└── og-card.html  # source used to render og.png — not linked from the page
+├── site.js          # waitlist form wiring (JSON POST to the API)
+├── favicon.svg      # favicon — teal double-backslash mark on canvas
+├── logo-lockup.png  # brand lockup (1920×410, transparent) used in topbar/hero/footer
+├── og.png           # social share card (1200×630), referenced by OG/Twitter meta tags
+└── og-card.html     # source used to render og.png — not linked from the page
 ```
 
 This directory intentionally sits **outside** the monorepo's `packages/*` npm-workspaces
@@ -28,26 +29,15 @@ Any static file server works; there is no build step.
 
 ## Waitlist form
 
-The form in `index.html` has two attributes on `<form id="waitlist-form">`:
-
-- `data-form-endpoint` — URL to POST the email to (Formspree-style: form data,
-  `Accept: application/json`, 2xx = success). **Empty by default.**
-- `data-fallback-email` — used when no endpoint is set: submitting opens a
-  pre-filled `mailto:` draft instead. Default `hello@slottedgolf.org`.
-
-To wire a real backend (example with [Formspree](https://formspree.io)):
-
-1. Create a form in Formspree; copy its endpoint, e.g. `https://formspree.io/f/abcdwxyz`.
-2. In `index.html`, set both attributes on the form:
-   ```html
-   <form ... action="https://formspree.io/f/abcdwxyz"
-             data-form-endpoint="https://formspree.io/f/abcdwxyz">
-   ```
-   (Setting `action` too means the form still works if JavaScript is disabled.)
-
-Any endpoint that accepts a POSTed `email` field works the same way (Buttondown,
-Basin, a tiny Cloudflare Worker, etc.). With JS disabled and no `action`, the browser
-falls back to a same-page GET, which is harmless; set `action` for a true no-JS path.
+`<form id="waitlist-form">` in `index.html` carries a `data-form-endpoint`
+attribute pointing at the waitlist API
+(`https://golf-fitter-server.fly.dev/api/waitlist`). On submit, `site.js`
+prevents the default, does a basic client-side email check, then POSTs JSON
+`{ "email": "…" }` with `Content-Type: application/json`. Any 2xx response
+counts as success ("You're on the list"); non-2xx and network errors show an
+inline retry message. The submit button is disabled while the request is in
+flight. There is no mailto fallback — the only mailto on the page is the
+contact link in the footer.
 
 ## Deploy
 
@@ -140,10 +130,13 @@ automatically once both resolve.
 
 ## Regenerating og.png
 
-`og.png` is a 1200×630 screenshot of `og-card.html`. To regenerate after editing:
-open `og-card.html` in a browser at exactly 1200×630 and screenshot, or use any
-headless browser, e.g.:
+`og.png` is a 1200×630 screenshot of `og-card.html`. To regenerate after editing
+(no new dependencies — uses installed Chrome):
 
 ```sh
-npx playwright screenshot --viewport-size=1200,630 site/og-card.html site/og.png
+cd site
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --headless=new --disable-gpu --hide-scrollbars \
+  --window-size=1200,630 --force-device-scale-factor=1 \
+  --screenshot=og.png "file://$PWD/og-card.html"
 ```
